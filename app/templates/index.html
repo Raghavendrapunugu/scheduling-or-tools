@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Call Center WFM Scheduler</title>
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; margin: 2rem; background-color: #f8f9fa; color: #212529; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 2rem; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .badge { display: inline-block; padding: 0.25em 0.6em; font-size: 75%; font-weight: 700; border-radius: 4px; color: #fff; background-color: #0d6efd; text-transform: uppercase; }
+        table { width: 100%; border-collapse: collapse; margin-top: 1.5rem; }
+        th, td { border: 1px solid #dee2e6; padding: 12px; text-align: center; }
+        th { background-color: #f1f3f5; }
+        button { background-color: #198754; color: white; border: none; padding: 10px 18px; border-radius: 4px; cursor: pointer; font-size: 1rem; font-weight: 500; }
+        button:hover { background-color: #157347; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Call Center Shift Scheduler <span class="badge">{{ env }}</span></h2>
+    <p>Engine: Google OR-Tools CP-SAT Solver</p>
+    
+    <button onclick="runSolver()">Run 7-Day Scheduler</button>
+    
+    <div id="output" style="margin-top: 1.5rem;"></div>
+</div>
+
+<script>
+async function runSolver() {
+    const output = document.getElementById('output');
+    output.innerHTML = "<p>Solving workforce constraints...</p>";
+    
+    const minCoverage = [
+        [3, 2, 1], [3, 2, 1], [3, 2, 1], [3, 2, 1], [3, 2, 1], [2, 1, 1], [2, 1, 1]
+    ];
+    
+    const payload = {
+        num_employees: 10,
+        days: 7,
+        shifts_per_day: 3,
+        min_coverage: minCoverage,
+        preferences: []
+    };
+
+    try {
+        const res = await fetch('/api/v1/schedule', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const data = await res.json();
+        if(!data.is_feasible) {
+            output.innerHTML = `<p style="color:#dc3545; font-weight:bold;">Infeasible schedule configuration.</p>`;
+            return;
+        }
+        
+        let html = `<h3>Solver Status: ${data.status}</h3><table><tr><th>Day</th><th>Morning</th><th>Evening</th><th>Night</th></tr>`;
+        data.schedule.forEach(d => {
+            html += `<tr><td>Day ${d.day + 1}</td>`;
+            d.shifts.forEach(s => {
+                const emps = s.assigned_employees.map(e => `Emp ${e}`).join(', ');
+                html += `<td>${emps || '<i>None</i>'}</td>`;
+            });
+            html += `</tr>`;
+        });
+        html += `</table>`;
+        output.innerHTML = html;
+    } catch (err) {
+        output.innerHTML = `<p style="color:#dc3545;">Failed to solve schedule: ${err}</p>`;
+    }
+}
+</script>
+</body>
+</html>

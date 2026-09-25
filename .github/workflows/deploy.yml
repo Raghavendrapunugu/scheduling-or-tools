@@ -1,0 +1,104 @@
+name: CI/CD Deployment Pipeline
+
+on:
+  push:
+    branches:
+      - dev       # Deploys to Dev Environment
+      - staging   # Deploys to UAT Environment
+      - main      # Deploys to Prod Environment
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    name: Run Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: uv sync --extra dev
+
+      - name: Execute Pytest
+        run: uv run pytest tests/
+
+  deploy:
+    name: Build & Deploy to AWS ECS
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Resolve Environment Variables
+        id: env-config
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            echo "ENV_NAME=prod" >> $GITHUB_OUTPUT
+            echo "ECS_CLUSTER=wfm-prod-cluster" >> $GITHUB_OUTPUT
+            echo "ECS_SERVICE=wfm-prod-service" >> $GITHUB_OUTPUT
+          elif [ "${{ github.ref }}" == "refs/heads/staging" ]; then
+            echo "ENV_NAME=uat" >> $GITHUB_OUTPUT
+            echo "ECS_CLUSTER=wfm-uat-cluster" >> $GITHUB_OUTPUT
+            echo "ECS_SERVICE=wfm-uat-service" >> $GITHUB_OUTPUT
+          else
+            echo "ENV_NAME=dev" >> $GITHUB_OUTPUT
+            echo "ECS_CLUSTER=wfm-dev-cluster" >> $GITHUB_OUTPUT
+            echo "ECS_SERVICE=wfm-dev-service" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and Push Container Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: wfm-app
+          IMAGE_TAG: ${{ steps.env-config.outputs.ENV_NAME }}-${{ github.sha }}
+          ENV_NAME: ${{ steps.env-config.outputs.ENV_NAME }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:$ENV_NAME-latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$ENV_NAME-latest
+          echo "FULL_IMAGE_URI=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Render ECS Task Definition
+        id: render-task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: task-definition.json
+          container-name: wfm-app
+          image: ${{ env.FULL_IMAGE_URI }}
+          environment-variables: |
+            ENVIRONMENT=${{ steps.env-config.outputs.ENV_NAME }}
+
+      - name: Deploy to AWS ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render-task-def.outputs.task-definition }}
+          service: ${{ steps.env-config.outputs.ECS_SERVICE }}
+          cluster: ${{ steps.env-config.outputs.ECS_CLUSTER }}
+          wait-for-service-stability: true

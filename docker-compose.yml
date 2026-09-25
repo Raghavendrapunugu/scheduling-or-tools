@@ -1,0 +1,37 @@
+services:
+  wfm-app-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wfm-app-dev
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=dev
+    volumes:
+      - ./app:/app/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  wfm-app-uat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wfm-app-uat
+    ports:
+      - "8001:8000"
+    environment:
+      - ENVIRONMENT=uat
+    profiles:
+      - staging
+
+  wfm-app-prod:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wfm-app-prod
+    ports:
+      - "8002:8000"
+    environment:
+      - ENVIRONMENT=prod
+    profiles:
+      - production

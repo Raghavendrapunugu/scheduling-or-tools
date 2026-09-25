@@ -1,0 +1,19 @@
+{
+  "name": "WFM OR-Tools Dev Container",
+  "image": "ghcr.io/astral-sh/uv:debian",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+  "postCreateCommand": "uv sync --extra dev",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "tamasfe.even-better-toml",
+        "ms-azuretools.vscode-docker",
+        "hashicorp.terraform"
+      ]
+    }
+  },
+  "remoteUser": "vscode"
+}
