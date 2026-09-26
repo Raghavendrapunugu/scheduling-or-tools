@@ -1,13 +1,17 @@
 {
-  "family": "wfm-scheduler",
+  "family": "wfm-app",
   "networkMode": "awsvpc",
-  "requiresCompatibilities": ["FARGATE"],
-  "cpu": "512",
-  "memory": "1024",
+  "requiresCompatibilities": [
+    "FARGATE"
+  ],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::604130971867:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
       "name": "wfm-app",
-      "image": "<AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/wfm-app:latest",
+      "image": "604130971867.dkr.ecr.us-east-1.amazonaws.com/wfm-app:latest",
+      "essential": true,
       "portMappings": [
         {
           "containerPort": 8000,
@@ -15,16 +19,10 @@
           "protocol": "tcp"
         }
       ],
-      "environment": [
-        {
-          "name": "ENVIRONMENT",
-          "value": "dev"
-        }
-      ],
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
-          "awslogs-group": "/ecs/wfm-scheduler",
+          "awslogs-group": "/ecs/wfm-app",
           "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "ecs"
         }
